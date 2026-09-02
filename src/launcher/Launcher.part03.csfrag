@@ -1,0 +1,179 @@
+                s.GetInt("restore_width", 0),
+                s.GetInt("restore_height", 0),
+                s.GetInt("restore_hz", 60),
+                s.GetInt("restore_bpp", 32));
+
+            if (r == N.DISP_CHANGE_SUCCESSFUL)
+            {
+                s.Set("pending_restore", false);
+                s.Save();
+                if (message)
+                    MessageBox.Show("Resolución de Windows restaurada.",
+                        "MPC-HC DLSS5", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return true;
+            }
+
+            if (message)
+                MessageBox.Show("Windows no pudo restaurar la resolución. Código: " + r,
+                    "MPC-HC DLSS5", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+    }
+
+
+    internal sealed class SupportForm : Form
+    {
+        private readonly State state;
+        private readonly bool manual;
+        private CheckBox never;
+
+        internal SupportForm(State s, bool isManual)
+        {
+            state = s;
+            manual = isManual;
+
+            Text = "Support MPC-HC DLSS5 / Apoyar el proyecto";
+            StartPosition = FormStartPosition.CenterScreen;
+            FormBorderStyle = FormBorderStyle.Sizable;
+            AutoScaleMode = AutoScaleMode.Dpi;
+            MinimizeBox = false;
+            MaximizeBox = true;
+            TopMost = true;
+
+            Rectangle wa = Screen.FromPoint(Cursor.Position).WorkingArea;
+            int initialW = Math.Min(1040, Math.Max(760, wa.Width - 80));
+            int initialH = Math.Min(820, Math.Max(600, wa.Height - 80));
+            ClientSize = new Size(initialW, initialH);
+            MinimumSize = new Size(720, 560);
+
+            TableLayoutPanel shell = new TableLayoutPanel();
+            shell.Dock = DockStyle.Fill;
+            shell.ColumnCount = 1;
+            shell.RowCount = 2;
+            shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            shell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            Controls.Add(shell);
+
+            Panel scroll = new Panel();
+            scroll.Dock = DockStyle.Fill;
+            scroll.AutoScroll = true;
+            scroll.Padding = new Padding(0);
+            shell.Controls.Add(scroll, 0, 0);
+
+            TableLayoutPanel body = new TableLayoutPanel();
+            body.Dock = DockStyle.Top;
+            body.AutoSize = true;
+            body.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            body.Padding = new Padding(18, 16, 18, 16);
+            body.ColumnCount = 1;
+            body.RowCount = 4;
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            scroll.Controls.Add(body);
+
+            Label title = new Label();
+            title.Text = "❤  Support development / Apoyar el desarrollo";
+            title.Font = new Font("Segoe UI", 12.5f, FontStyle.Bold);
+            title.AutoSize = true;
+            title.Margin = new Padding(0, 0, 0, 8);
+            body.Controls.Add(title, 0, 0);
+
+            Label intro = new Label();
+            intro.Text =
+                "El proyecto se distribuye gratis. Si te sirve, podés apoyar su desarrollo con cualquier monto." +
+                "\r\nEscaneá un QR con el celular o hacé click desde la PC.";
+            intro.Font = new Font("Segoe UI", 9.5f);
+            intro.AutoSize = true;
+            intro.MaximumSize = new Size(900, 0);
+            intro.Margin = new Padding(0, 0, 0, 14);
+            body.Controls.Add(intro, 0, 1);
+
+            FlowLayoutPanel cards = new FlowLayoutPanel();
+            cards.Dock = DockStyle.Top;
+            cards.AutoSize = true;
+            cards.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            cards.FlowDirection = FlowDirection.LeftToRight;
+            cards.WrapContents = true;
+            cards.Margin = new Padding(0, 0, 0, 10);
+            cards.Padding = new Padding(0);
+            cards.Controls.Add(CreateCard("Buy Me a Coffee", "BmcQr", C.Bmc, "Internacional / tarjetas"));
+            cards.Controls.Add(CreateCard("PayPal", "PaypalQr", C.Paypal, "paypal.me/leoavilagg"));
+            cards.Controls.Add(CreateCard("Mercado Pago", "MpQr", C.MpStore, "QR → app oficial Google Play"));
+            body.Controls.Add(cards, 0, 2);
+
+            TableLayoutPanel mpRow = new TableLayoutPanel();
+            mpRow.Dock = DockStyle.Top;
+            mpRow.AutoSize = true;
+            mpRow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            mpRow.ColumnCount = 2;
+            mpRow.RowCount = 1;
+            mpRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            mpRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            mpRow.Margin = new Padding(0, 4, 0, 0);
+
+            Button copy = new Button();
+            copy.Text = "Copiar alias: " + C.MpAlias;
+            copy.AutoSize = true;
+            copy.Padding = new Padding(10, 4, 10, 4);
+            copy.Margin = new Padding(0, 0, 14, 0);
+            copy.Click += delegate {
+                Clipboard.SetText(C.MpAlias);
+                MessageBox.Show("Alias copiado:\r\n\r\n" + C.MpAlias,
+                    "Mercado Pago", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            };
+            mpRow.Controls.Add(copy, 0, 0);
+
+            Label mp = new Label();
+            mp.Text = "El QR de Mercado Pago abre la app oficial en Google Play. " +
+                      "Después transferí al alias " + C.MpAlias + ".";
+            mp.AutoSize = true;
+            mp.MaximumSize = new Size(640, 0);
+            mp.Anchor = AnchorStyles.Left;
+            mpRow.Controls.Add(mp, 1, 0);
+            body.Controls.Add(mpRow, 0, 3);
+
+            TableLayoutPanel footer = new TableLayoutPanel();
+            footer.Dock = DockStyle.Fill;
+            footer.AutoSize = true;
+            footer.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            footer.Padding = new Padding(16, 10, 16, 10);
+            footer.ColumnCount = 2;
+            footer.RowCount = 1;
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            footer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            shell.Controls.Add(footer, 0, 1);
+
+            never = new CheckBox();
+            never.Text = "No volver a mostrar automáticamente / Don't show automatically again";
+            never.AutoSize = true;
+            never.Checked = state.GetBool("suppress_support", false);
+            never.Visible = !manual;
+            never.Anchor = AnchorStyles.Left;
+            never.Margin = new Padding(0, 7, 12, 7);
+            footer.Controls.Add(never, 0, 0);
+
+            Button close = new Button();
+            close.Text = "Continuar / Continue";
+            close.AutoSize = true;
+            close.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            close.Padding = new Padding(16, 6, 16, 6);
+            close.Margin = new Padding(12, 0, 0, 0);
+            close.Anchor = AnchorStyles.Right;
+            close.DialogResult = DialogResult.OK;
+            footer.Controls.Add(close, 1, 0);
+            AcceptButton = close;
+        }
+
+        private Control CreateCard(string title, string res, string url, string footer)
+        {
+            GroupBox box = new GroupBox();
+            box.Text = title;
+            box.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            box.AutoSize = true;
+            box.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            box.Padding = new Padding(10);
+            box.Margin = new Padding(5);
+            box.MinimumSize = new Size(270, 0);
