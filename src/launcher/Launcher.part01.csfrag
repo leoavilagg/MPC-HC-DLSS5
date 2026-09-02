@@ -1,0 +1,179 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Windows.Forms;
+
+[assembly: AssemblyTitle("MPC-HC DLSS5 Launcher")]
+[assembly: AssemblyDescription("MPC-HC launcher for DLSS 5 Neural Rendering")]
+[assembly: AssemblyCompany("LeoAvilaGG")]
+[assembly: AssemblyProduct("MPC-HC DLSS5 Launcher")]
+[assembly: AssemblyCopyright("2026 LeoAvilaGG")]
+[assembly: AssemblyVersion("2.3.8.0")]
+[assembly: AssemblyFileVersion("2.3.8.0")]
+
+namespace M5
+{
+    internal static class C
+    {
+        internal static string D(string s)
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(s));
+        }
+
+        internal static readonly string Bmc = D("aHR0cHM6Ly9idXltZWFjb2ZmZWUuY29tL2xlb2F2aWxhZ2c=");
+        internal static readonly string Paypal = D("aHR0cHM6Ly9wYXlwYWwubWUvbGVvYXZpbGFnZw==");
+        internal static readonly string MpStore = D("aHR0cHM6Ly9wbGF5Lmdvb2dsZS5jb20vc3RvcmUvYXBwcy9kZXRhaWxzP2lkPWNvbS5tZXJjYWRvcGFnby53YWxsZXQ=");
+        internal static readonly string MpAlias = D("bGVvdmlsYWdnLm1w");
+
+        internal static readonly string ExpectedSR = D("Qzg1Rjk3MUNFMDIzQzlGMzQ5MkZDNzQ1NUYwQjAxQTI0QkExOEVBMzk2MzY0MDdBODQ2OTAyQzQzNjBCMEI3RQ==");
+        internal static readonly string ExpectedNR = D("Q0VCNjQzMkY2RkJERjQ0RDg4NjAxNEJDRDQ3MjQxOTMyQkY4QjY3NDM5RkVFRjlCQkREMDk2MTQzNjY2MjY1MA==");
+        internal static readonly string ExpectedReno = D("RkU1MDVCNzNENkUzMTlCM0E1RTZGRTA5RTRFNkNBNkZCMEQ1RTkxNDFBNjExMkNBRTUyOEIxMUU0QkNCNEMwNw==");
+    }
+
+    internal sealed class State
+    {
+        private readonly string path;
+        private readonly Dictionary<string, string> data =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        internal State()
+        {
+            string dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "MPC-HC-DLSS5");
+            Directory.CreateDirectory(dir);
+            path = Path.Combine(dir, "launcher_state.ini");
+            Load();
+        }
+
+        private void Load()
+        {
+            data.Clear();
+            if (!File.Exists(path)) return;
+            foreach (string raw in File.ReadAllLines(path, Encoding.UTF8))
+            {
+                int i = raw.IndexOf('=');
+                if (i <= 0) continue;
+                data[raw.Substring(0, i)] = raw.Substring(i + 1);
+            }
+        }
+
+        internal void Save()
+        {
+            List<string> lines = new List<string>();
+            foreach (KeyValuePair<string,string> kv in data.OrderBy(x => x.Key))
+                lines.Add(kv.Key + "=" + kv.Value.Replace("\r", "").Replace("\n", ""));
+            File.WriteAllLines(path, lines.ToArray(), new UTF8Encoding(false));
+        }
+
+        internal string Get(string key, string def)
+        {
+            string v;
+            return data.TryGetValue(key, out v) ? v : def;
+        }
+
+        internal int GetInt(string key, int def)
+        {
+            int v;
+            return Int32.TryParse(Get(key, ""), out v) ? v : def;
+        }
+
+        internal bool GetBool(string key, bool def)
+        {
+            string v = Get(key, def ? "1" : "0");
+            return v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal void Set(string key, object value)
+        {
+            if (value is bool) data[key] = ((bool)value) ? "1" : "0";
+            else data[key] = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    internal static class N
+    {
+        internal const int ENUM_CURRENT_SETTINGS = -1;
+        internal const int DM_BITSPERPEL = 0x00040000;
+        internal const int DM_PELSWIDTH = 0x00080000;
+        internal const int DM_PELSHEIGHT = 0x00100000;
+        internal const int DM_DISPLAYFREQUENCY = 0x00400000;
+        internal const int DISP_CHANGE_SUCCESSFUL = 0;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        internal struct DEVMODE
+        {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string dmDeviceName;
+            public short dmSpecVersion;
+            public short dmDriverVersion;
+            public short dmSize;
+            public short dmDriverExtra;
+            public int dmFields;
+            public int dmPositionX;
+            public int dmPositionY;
+            public int dmDisplayOrientation;
+            public int dmDisplayFixedOutput;
+            public short dmColor;
+            public short dmDuplex;
+            public short dmYResolution;
+            public short dmTTOption;
+            public short dmCollate;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string dmFormName;
+            public short dmLogPixels;
+            public int dmBitsPerPel;
+            public int dmPelsWidth;
+            public int dmPelsHeight;
+            public int dmDisplayFlags;
+            public int dmDisplayFrequency;
+            public int dmICMMethod;
+            public int dmICMIntent;
+            public int dmMediaType;
+            public int dmDitherType;
+            public int dmReserved1;
+            public int dmReserved2;
+            public int dmPanningWidth;
+            public int dmPanningHeight;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        internal static extern bool EnumDisplaySettingsEx(
+            string lpszDeviceName, int iModeNum, ref DEVMODE lpDevMode, uint dwFlags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        internal static extern int ChangeDisplaySettingsEx(
+            string lpszDeviceName, ref DEVMODE lpDevMode,
+            IntPtr hwnd, uint dwflags, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        internal static extern bool SetProcessDPIAware();
+
+        internal static DEVMODE EmptyMode()
+        {
+            DEVMODE dm = new DEVMODE();
+            dm.dmDeviceName = String.Empty;
+            dm.dmFormName = String.Empty;
+            dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+            return dm;
+        }
+
+        internal static DEVMODE Current(string device)
+        {
+            DEVMODE dm = EmptyMode();
+            if (!EnumDisplaySettingsEx(device, ENUM_CURRENT_SETTINGS, ref dm, 0))
+                throw new InvalidOperationException("No pude leer el modo actual de " + device);
+            return dm;
+        }
+
+        internal static int Change(string device, int w, int h, int hz, int bpp)
+        {
+            DEVMODE dm = EmptyMode();
+            dm.dmPelsWidth = w;
