@@ -1,0 +1,110 @@
+name: Build launcher
+
+on:
+  push:
+    paths:
+      - "src/launcher/**"
+      - "assets_b64/**"
+      - ".github/workflows/build-launcher.yml"
+  pull_request:
+    paths:
+      - "src/launcher/**"
+      - "assets_b64/**"
+      - ".github/workflows/build-launcher.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Decode embedded assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "build-assets\qr" | Out-Null
+          [IO.File]::WriteAllBytes("build-assets\launcher.ico", [Convert]::FromBase64String((Get-Content "assets_b64\launcher.ico.b64" -Raw)))
+          [IO.File]::WriteAllBytes("build-assets\qr\buymeacoffee.png", [Convert]::FromBase64String((Get-Content "assets_b64\qr\buymeacoffee.png.b64" -Raw)))
+          [IO.File]::WriteAllBytes("build-assets\qr\paypal.png", [Convert]::FromBase64String((Get-Content "assets_b64\qr\paypal.png.b64" -Raw)))
+          [IO.File]::WriteAllBytes("build-assets\qr\mercadopago-playstore.png", [Convert]::FromBase64String((Get-Content "assets_b64\qr\mercadopago-playstore.png.b64" -Raw)))
+
+      - name: Reconstruct launcher source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "build" | Out-Null
+          Get-ChildItem "src\launcher\Launcher.part*.csfrag" |
+            Sort-Object Name |
+            ForEach-Object { Get-Content $_.FullName -Raw } |
+            Set-Content "build\Launcher.cs" -Encoding UTF8
+
+      - name: Create manifest
+        shell: pwsh
+        run: |
+          @'
+          <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+          <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+            <assemblyIdentity version="2.3.8.0" processorArchitecture="amd64" name="LeoAvilaGG.MPCHCDLSS5Launcher" type="win32"/>
+            <description>MPC-HC DLSS5 Launcher</description>
+            <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+              <security>
+                <requestedPrivileges>
+                  <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+                </requestedPrivileges>
+              </security>
+            </trustInfo>
+          </assembly>
+          '@ | Set-Content launcher.manifest -Encoding UTF8
+
+      - name: Locate .NET Framework compiler
+        id: csc
+        shell: pwsh
+        run: |
+          $paths = @(
+            "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
+            "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
+          )
+          $csc = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $csc) { throw "csc.exe not found" }
+          "path=$csc" >> $env:GITHUB_OUTPUT
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $rsp = @(
+            "/nologo",
+            "/target:winexe",
+            "/platform:x64",
+            "/optimize+",
+            "/debug-",
+            "/codepage:65001",
+            '/win32manifest:"launcher.manifest"',
+            '/win32icon:"build-assets\launcher.ico"',
+            "/reference:System.dll",
+            "/reference:System.Core.dll",
+            "/reference:System.Drawing.dll",
+            "/reference:System.Windows.Forms.dll",
+            '/resource:"build-assets\qr\buymeacoffee.png",BmcQr',
+            '/resource:"build-assets\qr\paypal.png",PaypalQr',
+            '/resource:"build-assets\qr\mercadopago-playstore.png",MpQr',
+            '/out:"MPC-HC DLSS5 Launcher.exe"',
+            '"build\Launcher.cs"'
+          )
+          [IO.File]::WriteAllLines("compiler.rsp", $rsp, [Text.UTF8Encoding]::new($false))
+          & "${{ steps.csc.outputs.path }}" "@compiler.rsp"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: SHA-256
+        shell: pwsh
+        run: |
+          Get-FileHash "MPC-HC DLSS5 Launcher.exe" -Algorithm SHA256 |
+            Format-List | Out-File "MPC-HC DLSS5 Launcher.sha256.txt"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MPC-HC-DLSS5-Launcher
+          path: |
+            MPC-HC DLSS5 Launcher.exe
+            MPC-HC DLSS5 Launcher.sha256.txt
