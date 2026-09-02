@@ -1,0 +1,51 @@
+                            throw new InvalidOperationException(
+                                "Windows rechazó el modo seleccionado. Código: " + r);
+                        }
+                        changed = true;
+                        System.Threading.Thread.Sleep(800);
+                    }
+                }
+
+                List<string> a = new List<string>();
+                if (Screen.AllScreens.Length > 1)
+                {
+                    a.Add("/monitor");
+                    a.Add(Convert.ToString(cfg.MonitorIndex + 1));
+                }
+                if (cfg.Fullscreen) a.Add("/fullscreen");
+                if (!String.IsNullOrWhiteSpace(cfg.Video))
+                    a.Add("\"" + cfg.Video.Replace("\"", "\\\"") + "\"");
+
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = Path.Combine(runtime, "mpc-hc64.exe");
+                psi.WorkingDirectory = runtime;
+                psi.Arguments = String.Join(" ", a.ToArray());
+                psi.UseShellExecute = true;
+
+                Process p = Process.Start(psi);
+                if (p == null) throw new InvalidOperationException("No se pudo iniciar MPC-HC.");
+                p.WaitForExit();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "MPC-HC DLSS5 Launcher",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                if (changed && cfg.RestoreAfter)
+                    Util.RestorePending(state, false);
+                else if (changed && !cfg.RestoreAfter)
+                {
+                    state.Set("pending_restore", false);
+                    state.Save();
+                }
+            }
+        }
+    }
+
+    internal static class LinqCompat
+    {
+        // Dummy holder to keep this file simple; no runtime use.
+    }
+}
