@@ -1,0 +1,180 @@
+                modes = Util.Modes(screens[monitors.SelectedIndex].DeviceName);
+                outputs.Items.Clear();
+                foreach (Mode m in modes) outputs.Items.Add(m);
+                if (outputs.Items.Count > 0) outputs.SelectedIndex = 0;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Pantalla",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void RefreshInfo()
+        {
+            Mode m = outputs.SelectedItem as Mode;
+            if (m == null) return;
+
+            int p = Decimal.ToInt32(work.Value);
+            int ww = (int)Math.Round(m.W * p / 100.0);
+            int wh = (int)Math.Round(m.H * p / 100.0);
+            double px = Math.Round((p / 100.0) * (p / 100.0) * 100.0, 1);
+            string dm = change.Checked ? "TEMP Windows" : "actual Windows";
+            string prof = profile.SelectedIndex == 0 ? "ESTABLE" : "TEMPORAL";
+
+            info.Text =
+                "Output / Feature18 : " + m.W + " x " + m.H + " @ " + m.Hz + " Hz (" + dm + ")\r\n" +
+                "DLSS work          : ~" + ww + " x " + wh + " (" + p + "% por eje; ~" + px + "% píxeles)\r\n" +
+                "Perfil             : " + prof + "   |   Binarios personalizados: PERMITIDOS";
+        }
+
+        private void QuickChanged(object sender, EventArgs e)
+        {
+            if (quick.SelectedItem == null) return;
+            string s = Convert.ToString(quick.SelectedItem);
+            int i = s.IndexOf('%');
+            if (i <= 0) return;
+            int v;
+            if (Int32.TryParse(s.Substring(0, i), out v))
+                work.Value = Math.Min(100, Math.Max(50, v));
+        }
+
+        private void Browse(object sender, EventArgs e)
+        {
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Title = "Elegir video";
+                d.Filter = "Video|*.mkv;*.mp4;*.avi;*.mov;*.m2ts;*.ts;*.webm|Todos|*.*";
+                if (d.ShowDialog(this) == DialogResult.OK)
+                    video.Text = d.FileName;
+            }
+        }
+
+        private void OpenMpc(object sender, EventArgs e)
+        {
+            Mode m = outputs.SelectedItem as Mode;
+            if (m == null || monitors.SelectedIndex < 0) return;
+
+            LaunchConfig c = new LaunchConfig();
+            c.MonitorIndex = monitors.SelectedIndex;
+            c.Device = screens[monitors.SelectedIndex].DeviceName;
+            c.W = m.W;
+            c.H = m.H;
+            c.Hz = m.Hz;
+            c.Bpp = m.Bpp;
+            c.Work = Decimal.ToInt32(work.Value);
+            c.Stable = profile.SelectedIndex == 0;
+            c.ChangeDisplay = change.Checked;
+            c.RestoreAfter = restore.Checked;
+            c.Fullscreen = fullscreen.Checked;
+            c.Video = video.Text.Trim();
+
+            state.Set("last_work_resolution", c.Work);
+            state.Set("last_profile", c.Stable ? "Stable" : "Temporal");
+            state.Set("last_change_display", c.ChangeDisplay);
+            state.Set("last_restore_after", c.RestoreAfter);
+            state.Set("last_fullscreen", c.Fullscreen);
+            state.Save();
+
+            Config = c;
+            LaunchRequested = true;
+            Close();
+        }
+    }
+
+    internal static class Program
+    {
+        [STAThread]
+        private static void Main(string[] args)
+        {
+            try { N.SetProcessDPIAware(); } catch {}
+
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            State state = new State();
+
+            // Crash-safe resolution recovery from a previous run.
+            if (state.GetBool("pending_restore", false))
+                Util.RestorePending(state, false);
+
+            if (args != null && args.Length > 0 &&
+                args[0].Equals("--restore-display", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!state.GetBool("pending_restore", false))
+                    MessageBox.Show("No hay una resolución temporal pendiente de restaurar.",
+                        "MPC-HC DLSS5", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                else
+                    Util.RestorePending(state, true);
+                return;
+            }
+
+            string runtime;
+            try
+            {
+                runtime = Util.RuntimePath();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "MPC-HC DLSS5",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            string integrity;
+            if (!Util.CheckCore(runtime, out integrity))
+            {
+                MessageBox.Show(integrity, "Integridad DLSS5",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            int count = state.GetInt("launch_count", 0) + 1;
+            state.Set("launch_count", count);
+            state.Save();
+
+            bool suppress = state.GetBool("suppress_support", false);
+            int every = Math.Max(1, state.GetInt("support_every", 20));
+            bool show = !suppress && (count == 1 || ((count - 1) % every == 0));
+            if (show)
+            {
+                using (SupportForm f = new SupportForm(state, false))
+                    f.ShowDialog();
+            }
+
+            LaunchConfig cfg;
+            using (MainForm f = new MainForm(state))
+            {
+                Application.Run(f);
+                if (!f.LaunchRequested || f.Config == null) return;
+                cfg = f.Config;
+            }
+
+            Util.WriteFeeder(runtime, cfg.Work, cfg.Stable);
+
+            bool changed = false;
+            try
+            {
+                if (cfg.ChangeDisplay)
+                {
+                    N.DEVMODE old = N.Current(cfg.Device);
+                    if (old.dmPelsWidth != cfg.W ||
+                        old.dmPelsHeight != cfg.H ||
+                        old.dmDisplayFrequency != cfg.Hz)
+                    {
+                        if (cfg.RestoreAfter)
+                        {
+                            state.Set("restore_device", cfg.Device);
+                            state.Set("restore_width", old.dmPelsWidth);
+                            state.Set("restore_height", old.dmPelsHeight);
+                            state.Set("restore_hz", old.dmDisplayFrequency);
+                            state.Set("restore_bpp", old.dmBitsPerPel);
+                            state.Set("pending_restore", true);
+                            state.Save();
+                        }
+
+                        int r = N.Change(cfg.Device, cfg.W, cfg.H, cfg.Hz, cfg.Bpp);
+                        if (r != N.DISP_CHANGE_SUCCESSFUL)
+                        {
+                            state.Set("pending_restore", false);
+                            state.Save();
