@@ -1,0 +1,180 @@
+            dm.dmPelsHeight = h;
+            dm.dmDisplayFrequency = hz;
+            dm.dmBitsPerPel = bpp > 0 ? bpp : 32;
+            dm.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT |
+                          DM_DISPLAYFREQUENCY | DM_BITSPERPEL;
+            return ChangeDisplaySettingsEx(device, ref dm, IntPtr.Zero, 0, IntPtr.Zero);
+        }
+    }
+
+    internal sealed class Mode
+    {
+        internal int W, H, Hz, Bpp;
+        internal bool Current;
+
+        public override string ToString()
+        {
+            return W + " x " + H + " @ " + Hz + " Hz" + (Current ? "  (actual)" : "");
+        }
+    }
+
+    internal sealed class LaunchConfig
+    {
+        internal int MonitorIndex;
+        internal string Device;
+        internal int W, H, Hz, Bpp, Work;
+        internal bool Stable, ChangeDisplay, RestoreAfter, Fullscreen;
+        internal string Video;
+    }
+
+    internal static class Util
+    {
+        internal static string Root
+        {
+            get { return AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar); }
+        }
+
+        internal static string RuntimePath()
+        {
+            string p = Path.Combine(Root, "RUNTIME_PATH.txt");
+            if (!File.Exists(p))
+                throw new FileNotFoundException(
+                    "Primero ejecutá el instalador final. Falta RUNTIME_PATH.txt.", p);
+            string r = File.ReadAllText(p, Encoding.UTF8).Trim();
+            if (!File.Exists(Path.Combine(r, "mpc-hc64.exe")))
+                throw new FileNotFoundException("No encuentro mpc-hc64.exe en: " + r);
+            return r;
+        }
+
+        internal static string Hash(string p)
+        {
+            using (SHA256 s = SHA256.Create())
+            using (FileStream f = File.OpenRead(p))
+            {
+                byte[] h = s.ComputeHash(f);
+                StringBuilder b = new StringBuilder(h.Length * 2);
+                foreach (byte x in h) b.Append(x.ToString("X2"));
+                return b.ToString();
+            }
+        }
+
+        internal static bool CheckCore(string runtime, out string error)
+        {
+            error = "";
+
+            // V2.3.7: custom NVIDIA/RenoDX/Feeder binaries are allowed.
+            // The launcher only checks that required runtime files exist.
+            // It intentionally does NOT enforce SHA-256/version equality.
+            string[] names = {
+                "nvngx_dlss.dll",
+                "nvngx_dlssnr.dll",
+                "renodx-dlss5.addon64",
+                "dlss5-feed.addon64"
+            };
+
+            for (int i = 0; i < names.Length; i++)
+            {
+                string p = Path.Combine(runtime, names[i]);
+                if (!File.Exists(p))
+                {
+                    error =
+                        "Falta " + names[i] + ".\r\n\r\n" +
+                        "Podés usar la versión incluida o una versión personalizada compatible.";
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        internal static void OpenUrl(string url)
+        {
+            ProcessStartInfo psi = new ProcessStartInfo(url);
+            psi.UseShellExecute = true;
+            Process.Start(psi);
+        }
+
+        internal static Image ResImage(string name)
+        {
+            Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
+            if (s == null) return null;
+            using (s)
+            using (Image i = Image.FromStream(s))
+                return new Bitmap(i);
+        }
+
+        internal static List<Mode> Modes(string device)
+        {
+            N.DEVMODE cur = N.Current(device);
+            List<Mode> raw = new List<Mode>();
+            for (int i = 0; i < 10000; i++)
+            {
+                N.DEVMODE dm = N.EmptyMode();
+                if (!N.EnumDisplaySettingsEx(device, i, ref dm, 0)) break;
+                if (dm.dmPelsWidth < 800 || dm.dmPelsHeight < 600 || dm.dmBitsPerPel < 24)
+                    continue;
+                raw.Add(new Mode {
+                    W = dm.dmPelsWidth, H = dm.dmPelsHeight,
+                    Hz = dm.dmDisplayFrequency, Bpp = dm.dmBitsPerPel
+                });
+            }
+
+            List<Mode> chosen = new List<Mode>();
+            Mode current = new Mode {
+                W = cur.dmPelsWidth, H = cur.dmPelsHeight,
+                Hz = cur.dmDisplayFrequency, Bpp = cur.dmBitsPerPel,
+                Current = true
+            };
+            chosen.Add(current);
+
+            foreach (IGrouping<string,Mode> g in raw.GroupBy(x => x.W + "x" + x.H))
+            {
+                if (g.Any(x => x.W == current.W && x.H == current.H)) continue;
+                Mode pick = g.Where(x => x.Hz == current.Hz)
+                             .OrderByDescending(x => x.Hz).FirstOrDefault();
+                if (pick == null)
+                    pick = g.Where(x => x.Hz <= current.Hz)
+                            .OrderByDescending(x => x.Hz).FirstOrDefault();
+                if (pick == null) pick = g.OrderByDescending(x => x.Hz).First();
+                chosen.Add(pick);
+            }
+
+            List<Mode> rest = chosen.Skip(1)
+                .OrderByDescending(x => x.W)
+                .ThenByDescending(x => x.H)
+                .ToList();
+            List<Mode> finalList = new List<Mode>();
+            finalList.Add(current);
+            finalList.AddRange(rest);
+            return finalList;
+        }
+
+        internal static void WriteFeeder(string runtime, int work, bool stable)
+        {
+            int reset = stable ? 1 : 0;
+            string cfg =
+                "enabled=1\r\n" +
+                "mode=2\r\n" +
+                "hdr=-1\r\n" +
+                "depth_inverted=-1\r\n" +
+                "flags=-1\r\n" +
+                "reset_every=" + reset + "\r\n" +
+                "warmup_rebuild=0\r\n" +
+                "rebuild=0\r\n" +
+                "log_frames=30\r\n" +
+                "create_delay=30\r\n" +
+                "preset=0\r\n" +
+                "work_resolution=" + work + "\r\n" +
+                "mv_scale_x=1.000\r\n" +
+                "mv_scale_y=1.000\r\n";
+            File.WriteAllText(Path.Combine(runtime, "dlss5-feed.cfg"), cfg, Encoding.ASCII);
+        }
+
+        internal static bool RestorePending(State s, bool message)
+        {
+            if (!s.GetBool("pending_restore", false)) return true;
+            string dev = s.Get("restore_device", "");
+            if (dev.Length == 0) return false;
+
+            int r = N.Change(
+                dev,
