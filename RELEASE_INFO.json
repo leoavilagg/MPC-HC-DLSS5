@@ -1,0 +1,14 @@
+{
+  "name": "MPC-HC DLSS5",
+  "version": "2.3.8",
+  "platform": "Windows x64",
+  "launcher_execution_level": "asInvoker",
+  "public_package_sha256": "86E988DA2C9F30781FBDBF2A873A56FA3360791A7290BA319548060AADA1CD63",
+  "architecture": "MPC-HC -> ReShade -> LumeniteFX -> DLSS5-Feeder -> NVIDIA NGX/DLSS -> RenoDX -> Feature 18",
+  "custom_runtime_binaries_allowed": true,
+  "support": {
+    "buy_me_a_coffee": "https://buymeacoffee.com/leoavilagg",
+    "paypal": "https://paypal.me/leoavilagg",
+    "mercado_pago_alias": "leovilagg.mp"
+  }
+}
