@@ -1,0 +1,180 @@
+                monitors.Items.Add((i + 1) + ": " + sc.DeviceName + "  " +
+                    sc.Bounds.Width + "x" + sc.Bounds.Height + mark);
+                if (sc.Primary) primary = i;
+            }
+            monitors.SelectedIndex = primary;
+
+            AddRowLabel(grid, "Resolución final / Output", 1);
+            outputs = new ComboBox();
+            outputs.DropDownStyle = ComboBoxStyle.DropDownList;
+            outputs.Dock = DockStyle.Fill;
+            outputs.Margin = new Padding(0, 0, 10, 9);
+            grid.Controls.Add(outputs, 1, 1);
+
+            change = new CheckBox();
+            change.Text = "Cambiar Windows temporalmente";
+            change.AutoSize = true;
+            change.Anchor = AnchorStyles.Left;
+            change.Margin = new Padding(0, 2, 0, 9);
+            change.Checked = state.GetBool("last_change_display", true);
+            grid.Controls.Add(change, 2, 1);
+
+            AddRowLabel(grid, "Resolución de trabajo DLSS", 2);
+            FlowLayoutPanel workPanel = new FlowLayoutPanel();
+            workPanel.AutoSize = true;
+            workPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            workPanel.WrapContents = false;
+            workPanel.FlowDirection = FlowDirection.LeftToRight;
+            workPanel.Margin = new Padding(0, 0, 10, 9);
+
+            work = new NumericUpDown();
+            work.Minimum = 50;
+            work.Maximum = 100;
+            work.Increment = 1;
+            work.Value = Math.Min(100, Math.Max(50, state.GetInt("last_work_resolution", 100)));
+            work.Width = 90;
+            workPanel.Controls.Add(work);
+
+            Label percent = new Label();
+            percent.Text = "%";
+            percent.AutoSize = true;
+            percent.Padding = new Padding(0, 7, 10, 0);
+            workPanel.Controls.Add(percent);
+            grid.Controls.Add(workPanel, 1, 2);
+
+            quick = new ComboBox();
+            quick.DropDownStyle = ComboBoxStyle.DropDownList;
+            quick.Width = 285;
+            quick.Margin = new Padding(0, 0, 0, 9);
+            quick.Items.Add("100% · Native / DLAA");
+            quick.Items.Add("90%");
+            quick.Items.Add("83%");
+            quick.Items.Add("75%");
+            quick.Items.Add("67% · Balance rendimiento/calidad");
+            quick.Items.Add("60%");
+            quick.Items.Add("50% · Menor carga GPU");
+            quick.SelectedIndex = 0;
+            grid.Controls.Add(quick, 2, 2);
+
+            AddRowLabel(grid, "Perfil temporal", 3);
+            profile = new ComboBox();
+            profile.DropDownStyle = ComboBoxStyle.DropDownList;
+            profile.Dock = DockStyle.Fill;
+            profile.Margin = new Padding(0, 0, 0, 9);
+            profile.Items.Add("Estable verificado · reset cada frame");
+            profile.Items.Add("Temporal experimental · historia + motion vectors");
+            profile.SelectedIndex = state.Get("last_profile", "Stable") == "Temporal" ? 1 : 0;
+            grid.Controls.Add(profile, 1, 3);
+            grid.SetColumnSpan(profile, 2);
+
+            AddRowLabel(grid, "Opciones", 4);
+            FlowLayoutPanel optionPanel = new FlowLayoutPanel();
+            optionPanel.AutoSize = true;
+            optionPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            optionPanel.FlowDirection = FlowDirection.TopDown;
+            optionPanel.WrapContents = false;
+            optionPanel.Margin = new Padding(0, 0, 0, 9);
+
+            fullscreen = new CheckBox();
+            fullscreen.Text = "Abrir en pantalla completa / Fullscreen";
+            fullscreen.AutoSize = true;
+            fullscreen.Checked = state.GetBool("last_fullscreen", true);
+            optionPanel.Controls.Add(fullscreen);
+
+            restore = new CheckBox();
+            restore.Text = "Restaurar resolución de Windows al cerrar MPC";
+            restore.AutoSize = true;
+            restore.Checked = state.GetBool("last_restore_after", true);
+            optionPanel.Controls.Add(restore);
+
+            grid.Controls.Add(optionPanel, 1, 4);
+            grid.SetColumnSpan(optionPanel, 2);
+
+            AddRowLabel(grid, "Video (opcional)", 5);
+            video = new TextBox();
+            video.Dock = DockStyle.Fill;
+            video.Margin = new Padding(0, 0, 10, 0);
+            grid.Controls.Add(video, 1, 5);
+
+            Button browse = new Button();
+            browse.Text = "Elegir…";
+            browse.AutoSize = true;
+            browse.Margin = new Padding(0);
+            browse.Click += Browse;
+            grid.Controls.Add(browse, 2, 5);
+
+            info = new TextBox();
+            info.ReadOnly = true;
+            info.Multiline = true;
+            info.TabStop = false;
+            info.ScrollBars = ScrollBars.None;
+            info.Font = new Font("Consolas", 9);
+            info.Dock = DockStyle.Top;
+            info.Height = 88;
+            info.Margin = new Padding(0, 0, 0, 0);
+            info.BackColor = SystemColors.Window;
+            body.Controls.Add(info, 0, 3);
+
+            TableLayoutPanel footer = new TableLayoutPanel();
+            footer.Dock = DockStyle.Fill;
+            footer.AutoSize = true;
+            footer.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            footer.Padding = new Padding(16, 12, 16, 12);
+            footer.ColumnCount = 2;
+            footer.RowCount = 1;
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            footer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            shell.Controls.Add(footer, 0, 1);
+
+            Button support = new Button();
+            support.Text = "❤  Apoyar / Support";
+            support.AutoSize = true;
+            support.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            support.Padding = new Padding(12, 7, 12, 7);
+            support.Margin = new Padding(0);
+            support.Anchor = AnchorStyles.Left;
+            support.Click += delegate {
+                using (SupportForm f = new SupportForm(state, true))
+                    f.ShowDialog(this);
+            };
+            footer.Controls.Add(support, 0, 0);
+
+            Button open = new Button();
+            open.Text = "▶  ABRIR MPC";
+            open.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+            open.AutoSize = true;
+            open.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            open.Padding = new Padding(16, 8, 16, 8);
+            open.Margin = new Padding(12, 0, 0, 0);
+            open.Anchor = AnchorStyles.Right;
+            open.Click += OpenMpc;
+            footer.Controls.Add(open, 1, 0);
+            AcceptButton = open;
+
+            monitors.SelectedIndexChanged += delegate { RefreshModes(); RefreshInfo(); };
+            outputs.SelectedIndexChanged += delegate { RefreshInfo(); };
+            work.ValueChanged += delegate { RefreshInfo(); };
+            change.CheckedChanged += delegate { RefreshInfo(); };
+            profile.SelectedIndexChanged += delegate { RefreshInfo(); };
+            quick.SelectedIndexChanged += QuickChanged;
+
+            RefreshModes();
+            RefreshInfo();
+        }
+
+        private void AddRowLabel(TableLayoutPanel grid, string text, int row)
+        {
+            Label l = new Label();
+            l.Text = text;
+            l.AutoSize = true;
+            l.Anchor = AnchorStyles.Left;
+            l.Margin = new Padding(0, 5, 12, 9);
+            grid.Controls.Add(l, 0, row);
+        }
+
+        private void RefreshModes()
+        {
+            if (monitors.SelectedIndex < 0) return;
+            try
+            {
