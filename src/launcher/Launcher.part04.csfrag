@@ -1,0 +1,180 @@
+            TableLayoutPanel inner = new TableLayoutPanel();
+            inner.AutoSize = true;
+            inner.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            inner.Dock = DockStyle.Top;
+            inner.ColumnCount = 1;
+            inner.RowCount = 4;
+            inner.Padding = new Padding(6, 4, 6, 8);
+            inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            box.Controls.Add(inner);
+
+            PictureBox p = new PictureBox();
+            p.Size = new Size(190, 190);
+            p.Margin = new Padding(25, 8, 25, 8);
+            p.SizeMode = PictureBoxSizeMode.Zoom;
+            p.Image = Util.ResImage(res);
+            p.Cursor = Cursors.Hand;
+            p.Anchor = AnchorStyles.Top;
+            p.Click += delegate { Util.OpenUrl(url); };
+            inner.Controls.Add(p, 0, 0);
+
+            Label scan = new Label();
+            scan.Text = "Escaneá el QR\r\no hacé click";
+            scan.TextAlign = ContentAlignment.MiddleCenter;
+            scan.AutoSize = true;
+            scan.Anchor = AnchorStyles.Top;
+            scan.Margin = new Padding(4, 2, 4, 4);
+            inner.Controls.Add(scan, 0, 1);
+
+            Label foot = new Label();
+            foot.Text = footer;
+            foot.TextAlign = ContentAlignment.MiddleCenter;
+            foot.AutoSize = true;
+            foot.MaximumSize = new Size(235, 0);
+            foot.Anchor = AnchorStyles.Top;
+            foot.Margin = new Padding(4, 2, 4, 8);
+            inner.Controls.Add(foot, 0, 2);
+
+            Button open = new Button();
+            open.Text = "Abrir / Open";
+            open.AutoSize = true;
+            open.Padding = new Padding(12, 4, 12, 4);
+            open.Anchor = AnchorStyles.Top;
+            open.Margin = new Padding(0, 0, 0, 4);
+            open.Click += delegate { Util.OpenUrl(url); };
+            inner.Controls.Add(open, 0, 3);
+
+            return box;
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            if (!manual)
+            {
+                state.Set("suppress_support", never.Checked);
+                state.Save();
+            }
+
+            foreach (Control c in Controls)
+                DisposeImagesRecursive(c);
+
+            base.OnFormClosed(e);
+        }
+
+        private void DisposeImagesRecursive(Control c)
+        {
+            PictureBox pb = c as PictureBox;
+            if (pb != null && pb.Image != null)
+            {
+                pb.Image.Dispose();
+                pb.Image = null;
+            }
+            foreach (Control child in c.Controls)
+                DisposeImagesRecursive(child);
+        }
+    }
+
+
+    internal sealed class MainForm : Form
+    {
+        private readonly State state;
+        private readonly Screen[] screens;
+
+        private ComboBox monitors, outputs, quick, profile;
+        private NumericUpDown work;
+        private CheckBox change, restore, fullscreen;
+        private TextBox video;
+        private TextBox info;
+        private List<Mode> modes = new List<Mode>();
+
+        internal bool LaunchRequested;
+        internal LaunchConfig Config;
+
+        internal MainForm(State s)
+        {
+            state = s;
+            screens = Screen.AllScreens;
+
+            Text = "MPC-HC DLSS5 Launcher";
+            StartPosition = FormStartPosition.CenterScreen;
+            FormBorderStyle = FormBorderStyle.Sizable;
+            AutoScaleMode = AutoScaleMode.Dpi;
+            Font = new Font("Segoe UI", 9);
+
+            Rectangle wa = Screen.FromPoint(Cursor.Position).WorkingArea;
+            int initialW = Math.Min(980, Math.Max(760, wa.Width - 100));
+            int initialH = Math.Min(820, Math.Max(600, wa.Height - 100));
+            ClientSize = new Size(initialW, initialH);
+            MinimumSize = new Size(700, 540);
+
+            TableLayoutPanel shell = new TableLayoutPanel();
+            shell.Dock = DockStyle.Fill;
+            shell.ColumnCount = 1;
+            shell.RowCount = 2;
+            shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            shell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            Controls.Add(shell);
+
+            Panel scroll = new Panel();
+            scroll.Dock = DockStyle.Fill;
+            scroll.AutoScroll = true;
+            shell.Controls.Add(scroll, 0, 0);
+
+            TableLayoutPanel body = new TableLayoutPanel();
+            body.Dock = DockStyle.Top;
+            body.AutoSize = true;
+            body.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            body.Padding = new Padding(18, 16, 18, 14);
+            body.ColumnCount = 1;
+            body.RowCount = 4;
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            scroll.Controls.Add(body);
+
+            Label h = new Label();
+            h.Text = "MPC-HC + DLSS 5 Neural Rendering";
+            h.Font = new Font("Segoe UI", 15f, FontStyle.Bold);
+            h.AutoSize = true;
+            h.Margin = new Padding(0, 0, 0, 6);
+            body.Controls.Add(h, 0, 0);
+
+            Label sub = new Label();
+            sub.Text = "Elegí la salida final y cuánto trabajo hace DLSS antes de abrir el reproductor.";
+            sub.AutoSize = true;
+            sub.MaximumSize = new Size(900, 0);
+            sub.Margin = new Padding(0, 0, 0, 14);
+            body.Controls.Add(sub, 0, 1);
+
+            TableLayoutPanel grid = new TableLayoutPanel();
+            grid.Dock = DockStyle.Top;
+            grid.AutoSize = true;
+            grid.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            grid.ColumnCount = 3;
+            grid.RowCount = 6;
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190f));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            for (int i = 0; i < 6; i++)
+                grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.Margin = new Padding(0, 0, 0, 12);
+            body.Controls.Add(grid, 0, 2);
+
+            AddRowLabel(grid, "Pantalla / Monitor", 0);
+            monitors = new ComboBox();
+            monitors.DropDownStyle = ComboBoxStyle.DropDownList;
+            monitors.Dock = DockStyle.Fill;
+            monitors.Margin = new Padding(0, 0, 0, 9);
+            grid.Controls.Add(monitors, 1, 0);
+            grid.SetColumnSpan(monitors, 2);
+
+            int primary = 0;
+            for (int i = 0; i < screens.Length; i++)
+            {
+                Screen sc = screens[i];
+                string mark = sc.Primary ? " · PRIMARY" : "";
